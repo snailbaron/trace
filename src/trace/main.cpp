@@ -20,7 +20,7 @@ int main()
         auto world = World{};
         world.createTestLevel();
 
-        auto view = View{};
+        auto view = View{world};
 
         const auto startTime = Clock::now();
         const auto frameDurationSec = 1.0 / 60;
@@ -41,9 +41,9 @@ int main()
 
             if (framesPassed > 0) {
                 for (int i = 0; i < framesPassed; i++) {
-                    world.update(frameDurationSec);
+                    world.update((float)frameDurationSec);
                 }
-                view.present(world);
+                view.present();
             }
 
             auto nextFrameTime = startTime + frameDuration * (currentFrame + 1);

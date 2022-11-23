@@ -23,10 +23,20 @@ namespace config {
     const SDL_Color materialColor {255, 180, 0, 255};
 };
 
+struct KeyboardMovementState {
+    bool left = false;
+    bool right = false;
+    bool forward = false;
+    bool backward = false;
+};
+
 class View {
 public:
-    View()
+    View(World& world)
+        : _world(world)
     {
+        sdlCheck(SDL_SetRelativeMouseMode(SDL_TRUE));
+
         _window = sdlCheck(SDL_CreateWindow(
             "Trace",
             SDL_WINDOWPOS_CENTERED,
@@ -40,24 +50,51 @@ public:
 
     bool processInput()
     {
+        bool keyboardMovementUpdated = false;
         for (auto e = SDL_Event{}; SDL_PollEvent(&e); ) {
             if (e.type == SDL_QUIT ||
                     e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_q &&
                         (e.key.keysym.mod & (KMOD_CTRL | KMOD_ALT | KMOD_SHIFT)) == 0) {
                 return false;
             }
+
+            if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) {
+                if (e.key.keysym.sym == SDLK_a) {
+                    _keyboardMovementState.left = (e.type == SDL_KEYDOWN);
+                    keyboardMovementUpdated = true;
+                } else if (e.key.keysym.sym == SDLK_d) {
+                    _keyboardMovementState.right = (e.type == SDL_KEYDOWN);
+                    keyboardMovementUpdated = true;
+                } else if (e.key.keysym.sym == SDLK_w) {
+                    _keyboardMovementState.forward = (e.type == SDL_KEYDOWN);
+                    keyboardMovementUpdated = true;
+                } else if (e.key.keysym.sym == SDLK_s) {
+                    _keyboardMovementState.backward = (e.type == SDL_KEYDOWN);
+                    keyboardMovementUpdated = true;
+                }
+            } else if (e.type == SDL_MOUSEMOTION) {
+                _world.turn(e.motion.xrel * 0.001, -e.motion.yrel * 0.001);
+            }
+        }
+
+        if (keyboardMovementUpdated) {
+            _world.move(
+                _keyboardMovementState.right -
+                    _keyboardMovementState.left,
+                _keyboardMovementState.forward -
+                    _keyboardMovementState.backward);
         }
 
         return true;
     }
 
-    void present(const World& world)
+    void present()
     {
-        const auto& origin = world.player.position;
-        const auto look = unit(world.player.direction);
+        const auto& origin = _world.player.position;
+        const auto look = unit(_world.player.direction);
 
         const auto screenCenter =
-            origin + unit(world.player.direction) * config::distanceToScreen;
+            origin + unit(_world.player.direction) * config::distanceToScreen;
 
         const auto deltaX = unit(Vector{look.y, -look.x, 0}) * config::pixelWorldSize;
         const auto deltaY = unit(Vector{
@@ -69,7 +106,7 @@ public:
         const float middleX = config::windowHorizPoints / 2.f - 0.5f;
         const float middleY = config::windowVertPoints / 2.f - 0.5f;
 
-        std::vector<Sphere> spheres = world.spheres;
+        std::vector<Sphere> spheres = _world.spheres;
         std::sort(
             spheres.begin(),
             spheres.end(),
@@ -103,6 +140,14 @@ public:
                     }
                 }
 
+                for (const auto& column : _world.columns) {
+                    auto reflection = castRay(origin, rayDirection, column);
+                    if (reflection && (!bestReflection ||
+                            reflection->distance < bestReflection->distance)) {
+                        bestReflection = reflection;
+                    }
+                }
+
                 if (bestReflection) {
                     auto brightness =
                         (-dot(config::lightDirection, bestReflection->normal) + 1.f) / 2;
@@ -130,7 +175,8 @@ public:
     }
 
 private:
+    World& _world;
     SDL_Window* _window = nullptr;
     SDL_Renderer* _renderer = nullptr;
+    KeyboardMovementState _keyboardMovementState;
 };
-
